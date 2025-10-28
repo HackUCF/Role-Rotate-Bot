@@ -1,45 +1,32 @@
 # Discord Role Rotation Bot
-# i got gemini to generate this readme
-
-This is a simple Python bot for Discord that automatically manages a "duty role" (e.g., "On-Call Developer," "Member of the Week") and rotates it among a list of users based on a configurable schedule.
-
-It is built using `discord.py` and its app commands framework.
-
-## Features 
 
 
-* **=TODO=Automatic Role Rotation:** Configure a schedule (days of the week, hour, minute) for the role to automatically pass to the next user.
-* **Dynamic User Management:** Add or remove members from the rotation list directly from Discord using commands.
-* **Robust Configuration:** All settings are loaded from external `conf.json` and `users.txt` files.
-* **Live Reload:** Reload the configuration files without needing to restart the bot.
+This is a simple Python bot for Discord that automatically manages rotating a role.
+
+It is built using `discord.py` and builtin discord commands
 
 ## Setup & Installation
 
-
-### 1. Prerequisites
-
+### Prereqs:
 * Python 3.12 or newer
 * A Discord Bot Token (create one at the [Discord Developer Portal](https://discord.com/developers/applications))
 
-### 2. Bot Configuration
+### The downloading and running:
 
-1.  **Clone Repository:**
-    ```bash
-    git clone https://github.com/HackUCF/Role-Rotate-Bot
-    cd role-rotate-bot
-    ```
 
-2.  **Install Dependencies:**
-    A `requirements.txt` is included. Install the dependencies using pip:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Set Bot Token and Guild ID:**
-    Create a file named `.env` in the root of the project directory. Add your bot token to it:
-    ```
-    DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
-    ```
+```bash
+git clone https://github.com/HackUCF/Role-Rotate-Bot
+cd role-rotate-bot
+pip install -r requirements.txt
+```
+Then make a `.env` file fill it out like this:
+```
+DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+```
+Now you can run it with `python3 main.py` which will make other default files: `users.txt` and `conf.json`. Fill these out and use `/reload` inside of your server to reload the config.
+```
+python3 main.py
+```
 
 4.  **Configure Bot Intents:**
     In the [Discord Developer Portal](https://discord.com/developers/applications), 
@@ -54,13 +41,6 @@ the oauth section
     ```bash
     python main.py
     ```
-    The bot will start and create two new files: `conf.json` and `users.txt`. Update them from defaults.
-
-2. **Set Role Hierarchy in Discord:**
-    This is **CRITICAL**. In your Discord server's "Settings" > "Roles", **you must drag the bot's role *above* the duty role** it is supposed to manage. If the bot's role is lower, it will not have permission to assign or remove the role.
-
-3. **Reload the Bot's Config:**
-    Once your config files are saved and role hierarchy is set, run the `/reload` command in Discord. The bot will load your new settings and be ready to go.
 
 ## Available Commands
 
