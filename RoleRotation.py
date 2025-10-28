@@ -7,11 +7,7 @@ import re
 from typing import override, List, Optional, Union
 import discord
 
-#todo unhandle error when you try to do stuff with people who just left the server discord.app_commands.errors.TransformerError
-
-
-
-
+#todo unhandled error when you try to do stuff with people who just left the server discord.app_commands.errors.TransformerError
 class Days(int, Enum):
     SUNDAY = 0
     MONDAY = 1
