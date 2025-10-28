@@ -1,4 +1,5 @@
 # Discord Role Rotation Bot
+# i got gemini to generate this readme
 
 This is a simple Python bot for Discord that automatically manages a "duty role" (e.g., "On-Call Developer," "Member of the Week") and rotates it among a list of users based on a configurable schedule.
 
