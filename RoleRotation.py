@@ -24,7 +24,6 @@ class Days(int, Enum):
 
 class ConfKeys(str, Enum):
     ROLE_ID = "role_id"
-    GUILD_ID = "guild_id"
     SCHEDULE_DAY = "schedule_day"
     SCHEDULE_HOUR = "schedule_hour"
     SCHEDULE_MINUTE = "schedule_minute"
@@ -78,21 +77,28 @@ class RoleRotation:
     simply call `await rotation_manager.load_config(client)` again.
     """
 
-    def __init__(self):
+    def __init__(self, client: discord.Client, guild_id: int):
         """Initializes the RoleRotation object in an unconfigured state."""
+
+        # Note that because we are not loggged in when this class is typically instanstanciated,
+        # most values have to be 0 or None until we are able to fetch the data with async operations
+        # additionally reading config from disk might fail, but we never want the class to fail to init
+        # Hence why loading must be explictly called using load_config
 
         # --- Config State ---
         self.config_good: bool = False
         self.scheduler = AsyncIOScheduler()
+        self.guild_id: int = guild_id
+        self.client = client
+
 
         # --- Fetched Discord Objects ---
-        self.duty_role: Optional[discord.Role] = None
+        self.managed_role: Optional[discord.Role] = None
         self.members: List[discord.Member] = []
-        self.guild: Optional[discord.Guild] = None
+        self.guild: discord.Guild = None
 
         # --- Config File Values ---
         self.member_ids: List[int] = []
-        self.guild_id: Optional[int] = None
         self.role_id: Optional[int] = None
         self.index: int = 0
         self.schedule_day: int = 0
@@ -100,13 +106,17 @@ class RoleRotation:
         self.schedule_minute: int = 0
 
 
-    async def load_config(self, client: discord.Client) -> Optional[Exception]:
+    async def load_config(self) -> Optional[Exception]:
         """
         Loads configuration from disk and fetches required Discord objects.
         This method fully populates the object's state.
 
         Returns True on success, False on failure.
         """
+        # We only want to load the guild once:
+        if self.guild is None:
+            self.guild = await self.client.fetch_guild(self.guild_id)
+
         # Reset state to unconfigured before attempting to load
         self.config_good = False
         print("Attempting to load RoleRotation config...")
@@ -132,23 +142,20 @@ class RoleRotation:
                 return KeyError(message)
 
             # 3. Fetch Discord objects
-            guild_id = conf_json[ConfKeys.GUILD_ID.value]
             role_id = conf_json[ConfKeys.ROLE_ID.value]
 
-            guild = await client.fetch_guild(guild_id)
-
-            duty_role = guild.get_role(role_id)  #todo enable caching? probably dont need to
+            duty_role = self.guild.get_role(role_id)  #todo enable caching? probably dont need to
             if not duty_role:
-                duty_role = await guild.fetch_role(role_id)  # Fetch if not in cache
+                duty_role = await self.guild.fetch_role(role_id)  # Fetch if not in cache
 
-            # if not duty_role:
+            # if not managed_role:
             #     print(f"Could not find Role with ID: {role_id} in Guild {guild.name}")
             #     return False
 
             # 4. Check bot's permissions
-            me = guild.get_member(client.user.id)
+            me = self.guild.get_member(self.client.user.id)
             if not me:
-                me = await guild.fetch_member(client.user.id)
+                me = await self.guild.fetch_member(self.client.user.id)
 
             if me.top_role <= duty_role:
                 print(f"Error: Bot's top role is not high enough to manage '{duty_role.name}'")
@@ -157,16 +164,14 @@ class RoleRotation:
             # 5. Fetch the members the configuration listed
             users = []
             for user_id in user_ids:
-                users.append(await guild.fetch_member(user_id))
+                users.append(await self.guild.fetch_member(user_id))
 
             # --- SUCCESS ---
             # All data is loaded and validated. Assign to self.
-            self.guild = guild
-            self.duty_role = duty_role
+            self.managed_role = duty_role
             self.members = users
             self.member_ids = user_ids
 
-            self.guild_id = guild_id
             self.role_id = role_id
             self.index = conf_json[ConfKeys.INDEX.value]
             self.schedule_hour = conf_json[ConfKeys.SCHEDULE_HOUR.value]
@@ -214,7 +219,6 @@ class RoleRotation:
             ConfKeys.SCHEDULE_MINUTE: int(random() * 60),
             ConfKeys.INDEX: 0,
             ConfKeys.ROLE_ID: 0,
-            ConfKeys.GUILD_ID: 0,
         }
 
         try:
@@ -288,12 +292,17 @@ class RoleRotation:
     async def clear_role(self):
         """Removes the duty role from all MANAGED members. User must purge roles from members not in the list."""
 
-        print(f"Clearing role '{self.duty_role.name}' from {len(self.members)} members.")
-        for memeber in self.members:
+        print(f"Clearing role '{self.managed_role.name}' from {len(self.members)} members.")
+        for member_id in self.member_ids:
             try:
-                await memeber.remove_roles(self.duty_role)
+                member = await self.guild.fetch_member(member_id)
+                if self.managed_role in member.roles:
+                    await member.remove_roles(self.managed_role)
+
             except (discord.Forbidden, discord.HTTPException) as e:
-                print(f"Failed to remove role from {memeber.name}: {e}")
+                print(f"Failed to remove role from {member.name}: {e}")
+                return False
+        return True
 
     @config_required
     def write_config(self):
@@ -304,7 +313,7 @@ class RoleRotation:
             ConfKeys.SCHEDULE_MINUTE: self.schedule_minute,
             ConfKeys.INDEX: self.index,
             ConfKeys.ROLE_ID: self.role_id,
-            ConfKeys.GUILD_ID: self.guild_id ,
+
         }
         try:
             with open(CONFIG_FILE_NAME, "w") as fp:
@@ -378,8 +387,10 @@ class RoleRotation:
     @config_required
     async def rotate_role(self):
         """Rotates the duty role to the next member in the list."""
-
-        await self.clear_role()
+        print(self.clear_role())
+        if await self.clear_role():
+            print("Failed rotate role because I couldn't clear the role from someone")
+            return False
 
         self.index += 1
         if self.index >= len(self.members):
@@ -388,10 +399,12 @@ class RoleRotation:
         next_user = self.members[self.index]
         print(f"Rotating role to member: {next_user.name}")
         try:
-            await next_user.add_roles(self.duty_role)
+            await next_user.add_roles(self.managed_role)
             self.write_config()
         except (discord.Forbidden, discord.HTTPException) as e:
             print(f"Failed to add role to {next_user.name}: {e}")
+
+        return True
 
     @config_required
     async def fetch_members(self) -> List[discord.Member]:
@@ -416,8 +429,8 @@ class RoleRotation:
             return "<RoleRotation (Unconfigured)>"
 
         return (f"<RoleRotation (Configured)>\n"
-                f"Guild: {self.guild.name} ({self.guild_id})\n"
-                f"Role: {self.duty_role.name} ({self.role_id})\n"
+                f"Guild: {self.guild.name} \n"
+                f"Role: {self.managed_role.name} ({self.role_id})\n"
                 f"Schedule Days: {self.schedule_day}\n"
                 f"Schedule Time: {self.schedule_hour:02d}:{self.schedule_minute:02d}\n"
                 f"Current Index: {self.index}\n"
@@ -431,7 +444,8 @@ class RoleRotation:
             self.rotate_role,
             trigger='cron',
             day_of_week=self.schedule_day,
-            hour=self.schedule_hour,
-            minute=self.schedule_minute
+            # hour=self.schedule_hour,
+            # minute=self.schedule_minute,
+            # second="*/15"
         )
 

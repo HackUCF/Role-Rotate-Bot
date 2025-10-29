@@ -1,56 +1,60 @@
 import logging
 import os
 import discord
-import dotenv
 from discord import app_commands
 from RoleRotation import RoleRotation
 
 
 
-# Configure logging for all discord.py internals
+# 1. Get the parent logger and set its level
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 
-# Optional: also see the HTTP (REST) messages
+# 2. Get the http logger AND set its level too
 http_logger = logging.getLogger('discord.http')
 http_logger.setLevel(logging.DEBUG)
 
-# Stream logs to console
+# 3. Create, format, and add the handler ONLY to the PARENT
 handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(name)s: %(message)s'))
+handler.setFormatter(
+    logging.Formatter('[%(asctime)s] [%(levelname)s] %(name)s: %(message)s')
+)
 logger.addHandler(handler)
-http_logger.addHandler(handler)
 
 
-#todo make a run configurationg that dont register commands
+#todo make a run configuration that dont register commands
 
-MY_GUILD = discord.Object(id=1326775993855381637)
+# MY_GUILD = discord.Object(id=1326775993855381637)
 class MyClient(discord.Client):
     # Suppress error on the User attribute being None since it fills up later
     user: discord.ClientUser
 
-    def __init__(self, *, intents: discord.Intents):
+    def __init__(self, *, intents: discord.Intents, guild_id=0):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
-        self.d = RoleRotation()
+        self.d = RoleRotation(self, guild_id)
+        self.guild = discord.Object(id=guild_id)
 
     # This is run only once, unlike on_ready()
     async def setup_hook(self):
         # This copies the global commands over to your guild.
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.d.load_config(client)
+        self.tree.copy_global_to(guild=self.guild)
+        await self.d.load_config()
         # self.d.write_config()
         self.d.scheduler.start()
-        foo = await self.tree.sync(guild=MY_GUILD)
-        print(foo)
+        commands_synced = await self.tree.sync(guild=self.guild)
+        print(commands_synced)
 
 # -------- Init some stuff --------- #
 description = "See the app_commands example from the discord.py github"
 intents = discord.Intents.default()  # I believe it defaults to none
 intents.guilds = True
 intents.members = True
+TOKEN = os.getenv('DISCORD_TOKEN')
+GUILD_ID = os.getenv('GUILD_ID')
+GUILD_ID = int(GUILD_ID)
+client = MyClient(intents=intents, guild_id=GUILD_ID)
 
-client = MyClient(intents=intents)
 
 
 @client.event
@@ -79,14 +83,16 @@ async def debug(interaction: discord.Interaction):
     await interaction.response.send_message("Done.")
     print(client.d)
 
-@client.tree.command(name="force_rotate", description="Force bot to rotate the duty_role.")
+@client.tree.command(name="force_rotate", description="Force bot to rotate the managed_role.")
 async def force_rotate(interaction: discord.Interaction):
-    await interaction.response.send_message("Done")
-    await client.d.rotate_role()
+    if not await client.d.rotate_role():
+        await interaction.response.send_message("Error trying to rotate the role.")
+    else:
+        await interaction.response.send_message("Done")
 
 @client.tree.command(description="Reload the config files")
 async def reload(interaction):
-    reloaded = await client.d.load_config(client)
+    reloaded = await client.d.load_config() # Must pass in case
     message = "Done"
     if issubclass(type(reloaded), Exception):
         message = (f" There was an error reloading:\n"
@@ -110,7 +116,7 @@ async def add_member(interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(f"Error:\n"
                                                 f"`{error}`")
 
-#todo only allow one of the bots commands to be active at a time
+#todo only allow one of the bot's commands to be active at a time
 @client.tree.command()
 @app_commands.describe(
     member="The name of the member to add to the rotation"
@@ -133,24 +139,5 @@ async def insert_member(interaction: discord.Interaction, member: discord.Member
     pass
 
 
-
 # -------- Running the bot --------- #
-# todo learn how to rotate the token
-
-while True:
-
-    # Loading the token, and keep trying until we load it and it is a valid one to log our bot in
-    dotenv.load_dotenv()
-    TOKEN = os.getenv("DISCORD_TOKEN")
-    if TOKEN is None:
-        print("The env file wasnt configured properly. Fix it, then press any key to continue")
-        input()
-        continue
-
-    try:
-        client.run(TOKEN)
-    except discord.LoginFailure as e:
-        print(e)
-        print('Fix the key, then restart the program')
-
-    break
+client.run(TOKEN)
