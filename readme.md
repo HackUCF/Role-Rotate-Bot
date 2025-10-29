@@ -10,6 +10,8 @@ It is built using `discord.py` and builtin discord commands
 ### Prereqs:
 * Python 3.12 or newer
 * A Discord Bot Token (create one at the [Discord Developer Portal](https://discord.com/developers/applications))
+* guild id (server id) for the server you will run the bot in
+* role id for the role that you want to rotate around
 
 ### The downloading and running:
 
@@ -19,11 +21,11 @@ git clone https://github.com/HackUCF/Role-Rotate-Bot
 cd role-rotate-bot
 pip install -r requirements.txt
 ```
-Then make a `.env` file fill it out like this:
+Then make a `.env` file, and paste this (puting your token in instead)
 ```
 DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
 ```
-Now you can run it with `python3 main.py` which will make other default files: `users.txt` and `conf.json`. Fill these out and use `/reload` inside of your server to reload the config.
+Now you can run it with `python3 main.py` which will make other default files: `users.txt` and `conf.json`. Fill these out with the role and guild, and then use `/reload` inside of your server to reload the config.
 ```
 python3 main.py
 ```
@@ -51,13 +53,15 @@ the oauth section
 * `/debug`: Prints the bot's current loaded configuration to the console.
 
 ## TODO
-* implement per member scheduling?
-  * someone is never avaible on mondays, so remove them
-  * rather than rotating when that happens, setup substitututions: `0 jmoney 1:jstyles` 
-    * every monday that jmoney has, jstyles will be pinged and told he is on duty instead
-  * substitutions could also be ephemeral, so specify a date to be unavailble and the scheduler will overide rotations with whatever it has logged
-* actually implement the scheduler lol
-  * somethinng to set the next rotate time/date
-  * something to watch the time and update when it hits that point
-* Implement the `/insert_member` command to add a user at a specific index.
+* `/insert_member`
+* `/info`
+* `/move_member`
+* `/set_schedule`
+* `/debug` print recent lines of console
+* `/set_index`
+* Add easter egg (plinksauce?)
+* Set up prop logging
+* 
+* Merge `users.txt` into `conf.json`
 * Add permission checks to commands (e.g., admin-only) using `@app_commands.checks.has_permissions()`.
+* add dockerfile
