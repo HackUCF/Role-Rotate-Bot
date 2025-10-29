@@ -10,7 +10,7 @@ from RoleRotation import RoleRotation
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 
-# 2. Get the http logger AND set its level too
+# # 2. Get the http logger AND set its level too
 http_logger = logging.getLogger('discord.http')
 http_logger.setLevel(logging.DEBUG)
 
@@ -24,7 +24,6 @@ logger.addHandler(handler)
 
 #todo make a run configuration that dont register commands
 
-# MY_GUILD = discord.Object(id=1326775993855381637)
 class MyClient(discord.Client):
     # Suppress error on the User attribute being None since it fills up later
     user: discord.ClientUser
@@ -55,8 +54,6 @@ GUILD_ID = os.getenv('GUILD_ID')
 GUILD_ID = int(GUILD_ID)
 client = MyClient(intents=intents, guild_id=GUILD_ID)
 
-
-
 @client.event
 async def on_ready():
     assert client.user is not None
@@ -66,13 +63,6 @@ async def on_ready():
 # -------- Registering commands --------- #
 #todo figure out how to only allow server admins to use the command
 #todo im pretty sure it has to do with the @client.tree.check decorator but...
-
-
-@client.tree.command(name="add", description="Adds two numbers together.")
-@app_commands.describe(
-    left="The first number",
-    right="The second number"
-)
 async def add(interaction: discord.Interaction, left: int, right: int):
     """Adds two digits together"""
     await interaction.response.send_message(f"Result: { left + right }")
@@ -80,7 +70,10 @@ async def add(interaction: discord.Interaction, left: int, right: int):
 
 @client.tree.command(name="debug", description="prints debugging info to console")
 async def debug(interaction: discord.Interaction):
-    await interaction.response.send_message("Done.")
+    await interaction.response.send_message(f"```\n"
+                                            f"{client.d}"
+                                            f"```"
+                                            )
     print(client.d)
 
 @client.tree.command(name="force_rotate", description="Force bot to rotate the managed_role.")
@@ -129,14 +122,6 @@ async def remove_member(interaction: discord.Interaction, member: discord.Member
     else:
         await interaction.response.send_message(f"Could not find member: {member}")
 
-@client.tree.command()
-@app_commands.describe(
-    member="The name of the member to move their position in the schedule",
-    index="The 0-indexed position they should be in. 0 Is first in rotation"
-)
-
-async def insert_member(interaction: discord.Interaction, member: discord.Member, index: int):
-    pass
 
 
 # -------- Running the bot --------- #

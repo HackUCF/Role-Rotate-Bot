@@ -13,36 +13,26 @@ It is built using `discord.py` and builtin discord commands
 * guild id (server id) for the server you will run the bot in
 * role id for the role that you want to rotate around
 
-### The downloading and running:
+**Configure Bot Intents:**
+    In the [Discord Developer Portal](https://discord.com/developers/applications), 
+go to your bot's "Bot" tab and enable the **Server Members Intent**. This is **required**
+for the bot to find and manage users. When adding the bot to the server, make sure to allow app_commands in
+the oauth section
+
+### Downloading and running:
 
 
 ```bash
 git clone https://github.com/HackUCF/Role-Rotate-Bot
 cd role-rotate-bot
 pip install -r requirements.txt
-```
-Then make a `.env` file, and paste this (puting your token in instead)
-```
-DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
-```
-Now you can run it with `python3 main.py` which will make other default files: `users.txt` and `conf.json`. Fill these out with the role and guild, and then use `/reload` inside of your server to reload the config.
-```
-python3 main.py
+
+# To run the server you pass secrets as environment variables
+python3 DISCORD_TOKEN=your_token_here GUILD_ID=id_of_your_server main.py
 ```
 
-4.  **Configure Bot Intents:**
-    In the [Discord Developer Portal](https://discord.com/developers/applications), 
-go to your bot's "Bot" tab and enable the **Server Members Intent**. This is **required**
-for the bot to find and manage users. When adding the bot to the server, make sure to allow app_commands in
-the oauth section
+When it first starts, it will make other default files: `users.txt` and `conf.json`. You can use `/reload` to reload the config live.
 
-### 3. First-Time Run & Configuration
-
-1.  **Run the Bot:**
-    Run the bot for the first time:
-    ```bash
-    python main.py
-    ```
 
 ## Available Commands
 
