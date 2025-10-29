@@ -387,8 +387,7 @@ class RoleRotation:
     @config_required
     async def rotate_role(self):
         """Rotates the duty role to the next member in the list."""
-        print(self.clear_role())
-        if await self.clear_role():
+        if not await self.clear_role():
             print("Failed rotate role because I couldn't clear the role from someone")
             return False
 
