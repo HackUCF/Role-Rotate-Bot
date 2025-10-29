@@ -43,15 +43,13 @@ When it first starts, it will make other default files: `users.txt` and `conf.js
 * `/debug`: Prints the bot's current loaded configuration to the console.
 
 ## TODO
-* `/insert_member`
 * `/info`
 * `/move_member`
 * `/set_schedule`
 * `/debug` print recent lines of console
 * `/set_index`
+* update debug
 * Add easter egg (plinksauce?)
 * Set up proper logging, and standardize how/where errors are handled
-* 
-* Merge `users.txt` into `conf.json`
 * Add permission checks to commands (e.g., admin-only) using `@app_commands.checks.has_permissions()`.
 * add dockerfile

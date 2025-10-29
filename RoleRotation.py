@@ -1,15 +1,17 @@
 import json
-
 from enum import Enum
+from operator import index
 from pathlib import (Path)
 from random import random
-from sys import exception
 from typing import override, List, Optional
 
 import discord
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import functools
 import asyncio
+
+from discord.ext.commands.parameters import empty
+
 
 class Days(int, Enum):
     MONDAY = 0
@@ -157,9 +159,19 @@ class RoleRotation:
             self.schedule_minute = conf_json[ConfKeys.SCHEDULE_MINUTE.value]
             self.schedule_day = conf_json[ConfKeys.SCHEDULE_DAY.value]
 
-            self.config_good = True
-            print("RoleRotation config loaded successfully.")
-            self.update_scheduler()
+            if self.members is empty:
+                print("There is no one in the list. Leaving config invalid to prevent index error.")
+            else:
+                try:
+                    self.members[self.index]
+                except IndexError as e:
+                    print("The index in conf was somehow out of range. What was the last command you ran?")
+                    print("Are there any people in the list?")
+                    return e
+
+                self.config_good = True
+                print("RoleRotation config loaded successfully.")
+                self.update_scheduler()
             return None
 
         except json.JSONDecodeError as e:
@@ -238,27 +250,36 @@ class RoleRotation:
                 await member.remove_roles(self.managed_role)
 
 
+    # @config_required
+    def write_config(self, force=False):
+        if self.config_good or force:
+            #todo forcing this could never cause a fatal error right?
+
+            print("writing config")
+            config = {
+                ConfKeys.SCHEDULE_DAY: self.schedule_day,
+                ConfKeys.SCHEDULE_HOUR: self.schedule_hour,
+                ConfKeys.SCHEDULE_MINUTE: self.schedule_minute,
+                ConfKeys.INDEX: self.index,
+                ConfKeys.ROLE_ID: self.role_id,
+                ConfKeys.MEMBER_IDS: list(member.id for member in self.members)
+
+            }
+
+            with open(CONFIG_FILE_NAME, "w") as fp:
+                json.dump(config, fp, indent=4)
+            print("wrote config")
+
+
+
+
     @config_required
-    def write_config(self):
-        print("writing config")
-        config = {
-            ConfKeys.SCHEDULE_DAY: self.schedule_day,
-            ConfKeys.SCHEDULE_HOUR: self.schedule_hour,
-            ConfKeys.SCHEDULE_MINUTE: self.schedule_minute,
-            ConfKeys.INDEX: self.index,
-            ConfKeys.ROLE_ID: self.role_id,
-            ConfKeys.MEMBER_IDS: list(member.id for member in self.members)
-
-        }
-
-        with open(CONFIG_FILE_NAME, "w") as fp:
-            json.dump(config, fp, indent=4)
-
-
-    @config_required
-    async def add_user(self, member_id: int):
-        """Adds a user to the botton of the rotation"""
-
+    async def add_user(self, member_id: int, position: int=-1):
+        """
+        Adds a user to the botton of the rotation.
+        Returns the user if they were successfully added and moved (if applicable)
+        """
+        #todo why does remove user have no error handling, but this function does?. Should they match?
         print("Appending user")
         try:
             new_member = await self.guild.fetch_member(member_id)
@@ -275,23 +296,40 @@ class RoleRotation:
 
         except discord.NotFound as e:
             e.add_note("A member with this ID does not exist.")
-            raise e
+            return None
         except discord.Forbidden as e:
             e.add_note("Cannot add a user who is not in this guild")
-            raise e
-        except Exception as e:
-            e.add_note("Error trying to add a user")
-            raise e
+            return None
+
+        if position != -1:
+            try:
+                self.move_member(new_member, position)
+            except Exception as e:
+                e.add_note("Successfully added a user, but couldn't move them to the position specified.")
+                raise e
+        return new_member
 
     @config_required
     def remove_user(self, member_id):
 
-        to_delete = discord.Member(member_id)
+        deleted = None
+        # If we delete the user who is on duty we need to notify the user
+        if self.members[self.index].id == member_id:
+            raise Exception("Cannot delete the user who is currently on duty")
         for i, m in enumerate(self.members):
-            if to_delete == m:
-                del  self.members[i]
+            if member_id == m.id:
+                if i <= self.index:
+                    self.index = self.index-1
+                deleted = self.members.pop(i)
                 self.write_config()
+                print("wrote config")
                 break
+
+        if self.members is empty:
+            self.config_good = False
+            raise Exception("Successfully deleted, but now there is no one left in the list. Add someone and reload.")
+
+        return deleted
 
     @config_required
     async def rotate_role(self):
@@ -313,6 +351,24 @@ class RoleRotation:
             e.add_note("Failed to write config to disk while rotating. The index is probably wrong right now.")
             raise e
 
+    # @config_required
+    def set_index(self, i: int, force=False):
+        if self.config_good:
+            print("changing the index to " + i.__str__())
+            old_member = self.members[self.index]
+            new_member = self.members[i]
+            if old_member == new_member: return
+
+            self.clear_role()
+            self.index = i
+            new_member.add_roles(self.managed_role)
+            self.write_config()
+        elif force:
+            self.index = i
+            self.write_config(force=True)
+            print("Forcibly changed the index, will need a reload")
+
+        else: raise Exception("Tried to run this command without forcing it, but with unconfigured config")
 
     @config_required
     async def fetch_members(self) -> List[discord.Member]:
@@ -326,7 +382,6 @@ class RoleRotation:
                 members.append(await self.guild.fetch_member(mem_id))
             except Exception as e:
                 e.add_note("Failed to fetch members for some reason")
-                e.add_note("Failed to fetch members for some reason")
                 self.config_good = False
                 raise e
 
@@ -334,22 +389,40 @@ class RoleRotation:
         return members
 
     @config_required
-    def move_member(self, member: discord.Member):
-        pass
+    def move_member(self, member: discord.Member, position: int):
+        if position < 0 or position > len(self.members)-1:
+            raise Exception(f"Tried to move to an out-of-range index. Max is {len(self.members) - 1}")
+
+        cur_pos = self.members.index(member)
+        if cur_pos == -1:
+            raise Exception("Tried to move a member who is not listed in config")
+        if cur_pos == position:
+            return # They arent moving it anywhere lol
+
+        # Deleting, then inserting into the correct position
+        _ = self.members.pop(cur_pos) # The function argument is likely a more recent fetch
+        if position == len(self.members)-1: # They specified the last index, so just append it
+            self.members.append(member)
+        elif position < cur_pos: # Indexes to the left are unaffected when we remove an item
+            self.members.insert(position, member)
+        else: # indexes to the right are left shifted when we remove
+            self.members.insert(position-1, member)
+
 
     @override
     def __str__(self):
-        if not self.config_good:
-            return "<RoleRotation (Unconfigured)>"
-
+        # todo this will definetly throw errors when the config isnt configured... but it needs to not
         return (f"<RoleRotation (Configured)>\n"
-                f"Guild: {self.guild.name} \n"
-                f"Role: {self.managed_role.name} ({self.role_id})\n"
+                f"Guild id: {self.guild_id} \n"
+                f"Guild: {self.guild} \n"                
+                f"Role: {self.role_id} ({self.managed_role})\n"
                 f"Schedule Days: {self.schedule_day}\n"
                 f"Schedule Time: {self.schedule_hour:02d}:{self.schedule_minute:02d}\n"
                 f"Current Index: {self.index}\n"
-                f"On Duty: {self.members[self.index].name if self.members else 'None'}\n"
-                f"Users: {[user.name for user in self.members]}")
+                f"Members: {list(m.name for m in self.members)}"
+                )
+                # f"On Duty: {self.members[self.index].name if self.members else 'None'}\n"
+                # f"Users: {[user.name for user in self.members]}")
 
     @config_required
     def update_scheduler(self):
