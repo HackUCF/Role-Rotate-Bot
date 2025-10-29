@@ -1,9 +1,6 @@
 import logging
 import os
-
 import discord
-import json
-
 import dotenv
 from discord import app_commands
 from RoleRotation import RoleRotation
@@ -42,7 +39,8 @@ class MyClient(discord.Client):
         # This copies the global commands over to your guild.
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.d.load_config(client)
-        self.d.write_config()
+        # self.d.write_config()
+        self.d.scheduler.start()
         foo = await self.tree.sync(guild=MY_GUILD)
         print(foo)
 
@@ -130,8 +128,10 @@ async def remove_member(interaction: discord.Interaction, member: discord.Member
     member="The name of the member to move their position in the schedule",
     index="The 0-indexed position they should be in. 0 Is first in rotation"
 )
+
 async def insert_member(interaction: discord.Interaction, member: discord.Member, index: int):
     pass
+
 
 
 # -------- Running the bot --------- #
@@ -152,6 +152,5 @@ while True:
     except discord.LoginFailure as e:
         print(e)
         print('Fix the key, then restart the program')
-
 
     break

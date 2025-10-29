@@ -5,7 +5,11 @@ from pathlib import (Path)
 from random import random
 import re
 from typing import override, List, Optional, Union
+
 import discord
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import functools
+import asyncio
 
 #todo unhandled error when you try to do stuff with people who just left the server discord.app_commands.errors.TransformerError
 class Days(int, Enum):
@@ -21,19 +25,14 @@ class Days(int, Enum):
 class ConfKeys(str, Enum):
     ROLE_ID = "role_id"
     GUILD_ID = "guild_id"
-    SCHEDULE_DAYS = "schedule_days"
+    SCHEDULE_DAY = "schedule_day"
     SCHEDULE_HOUR = "schedule_hour"
     SCHEDULE_MINUTE = "schedule_minute"
     INDEX = "index"
 
-
 USERS_FILE_NAME = Path("./users.txt")
 CONFIG_FILE_NAME = Path("./conf.json")
 
-import functools
-import asyncio
-
-# TODO there is probably a better way than just having this over every single freaking method, but whatever
 def config_required(func):
     """
     A decorator that stops a method from running if self.config_good is False.
@@ -84,6 +83,7 @@ class RoleRotation:
 
         # --- Config State ---
         self.config_good: bool = False
+        self.scheduler = AsyncIOScheduler()
 
         # --- Fetched Discord Objects ---
         self.duty_role: Optional[discord.Role] = None
@@ -95,7 +95,7 @@ class RoleRotation:
         self.guild_id: Optional[int] = None
         self.role_id: Optional[int] = None
         self.index: int = 0
-        self.schedule_days: List[Days] = []
+        self.schedule_day: int = 0
         self.schedule_hour: int = 0
         self.schedule_minute: int = 0
 
@@ -171,10 +171,11 @@ class RoleRotation:
             self.index = conf_json[ConfKeys.INDEX.value]
             self.schedule_hour = conf_json[ConfKeys.SCHEDULE_HOUR.value]
             self.schedule_minute = conf_json[ConfKeys.SCHEDULE_MINUTE.value]
-            self.schedule_days = [Days(day) for day in conf_json[ConfKeys.SCHEDULE_DAYS.value]]
+            self.schedule_day =  conf_json[ConfKeys.SCHEDULE_DAY.value]
 
             self.config_good = True
             print("RoleRotation config loaded successfully.")
+            self.update_scheduler()
             return None
 
         except json.JSONDecodeError as e:
@@ -208,7 +209,7 @@ class RoleRotation:
             return
 
         config = {
-            ConfKeys.SCHEDULE_DAYS: list(range(0, 7)),
+            ConfKeys.SCHEDULE_DAY: int(random() * 7),
             ConfKeys.SCHEDULE_HOUR: int(random() * 24),
             ConfKeys.SCHEDULE_MINUTE: int(random() * 60),
             ConfKeys.INDEX: 0,
@@ -298,7 +299,7 @@ class RoleRotation:
     def write_config(self):
 
         config = {
-            ConfKeys.SCHEDULE_DAYS: self.schedule_days,
+            ConfKeys.SCHEDULE_DAY: self.schedule_day,
             ConfKeys.SCHEDULE_HOUR: self.schedule_hour,
             ConfKeys.SCHEDULE_MINUTE: self.schedule_minute,
             ConfKeys.INDEX: self.index,
@@ -417,8 +418,20 @@ class RoleRotation:
         return (f"<RoleRotation (Configured)>\n"
                 f"Guild: {self.guild.name} ({self.guild_id})\n"
                 f"Role: {self.duty_role.name} ({self.role_id})\n"
-                f"Schedule Days: {[day.name for day in self.schedule_days]}\n"
+                f"Schedule Days: {self.schedule_day}\n"
                 f"Schedule Time: {self.schedule_hour:02d}:{self.schedule_minute:02d}\n"
                 f"Current Index: {self.index}\n"
                 f"On Duty: {self.members[self.index].name if self.members else 'None'}\n"
                 f"Users: {[user.name for user in self.members]}")
+
+    @config_required
+    def update_scheduler(self):
+        self.scheduler.remove_all_jobs()
+        self.scheduler.add_job(
+            self.rotate_role,
+            trigger='cron',
+            day_of_week=self.schedule_day,
+            hour=self.schedule_hour,
+            minute=self.schedule_minute
+        )
+
