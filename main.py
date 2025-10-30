@@ -1,10 +1,8 @@
 import logging
 import os
-from optparse import Option
 
 import discord
 from discord import app_commands
-from discord.ext.commands.parameters import empty
 
 from RoleRotation import RoleRotation
 
@@ -155,11 +153,29 @@ async def remove_member(interaction: discord.Interaction, member: discord.Member
     else:
         await interaction.response.send_message(f"Removed {deleted.name}.")
 
+
+@client.tree.command()
+@app_commands.describe(
+    day="The day of the week to rotate the role (monday is 0).",
+    hour="The hour to rotate the role. Uses 24 time.",
+    minute="The minute of the hour to rotate the role."
+)
+async def set_schedule(interaction: discord.Interaction, day: int=-1, hour: int=-1, minute: int=-1):
+    """Set at what time of the week to rotate the role."""
+
+    msg = "Done"
+    try:
+        client.d.set_new_schedule(day, hour, minute)
+    except Exception as e:
+        msg = codeblock(e.__str__())
+
+    await interaction.response.send_message(msg)
+
+
 @client.tree.command()
 @app_commands.describe(
     i="An index for the rotation to be set to."
 )
-
 async def set_index(interaction: discord.Interaction, i: int, force: bool=False):
     message = ""
     try:
@@ -170,8 +186,6 @@ async def set_index(interaction: discord.Interaction, i: int, force: bool=False)
     if force:
         message += "Dont forget to reload."
     await interaction.response.send_message(f"Set the index to {i.__str__()} {message}")
-
-
 
 
 # -------- Running the bot --------- #

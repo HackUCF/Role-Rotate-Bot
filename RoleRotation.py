@@ -36,33 +36,33 @@ class ConfKeys(str, Enum):
 CONFIG_FILE_NAME = Path("./conf.json")
 
 
-def config_required(func):
-    """
-    A decorator that stops a method from running if self.config_good is False.
-    Handles both synchronous and asynchronous methods.
-    """
-
-    @functools.wraps(func)
-    async def async_wrapper(self, *args, **kwargs):
-        # The 'self' argument is the instance of RoleRotation
-        if not self.config_good:
-            print(f"Cannot run '{func.__name__}': Config is not loaded. Please run load_config().")
-            return None
-        return await func(self, *args, **kwargs)
-
-    @functools.wraps(func)
-    def sync_wrapper(self, *args, **kwargs):
-        # The 'self' argument is the instance of RoleRotation
-        if not self.config_good:
-            print(f"Cannot run '{func.__name__}': Config is not loaded. Please run load_config().")
-            return None
-        return func(self, *args, **kwargs)
-
-    # Return the correct wrapper based on whether the original function was async
-    if asyncio.iscoroutinefunction(func):
-        return async_wrapper
-    else:
-        return sync_wrapper
+# def config_required(func):
+#     """
+#     A decorator that stops a method from running if self.config_good is False.
+#     Handles both synchronous and asynchronous methods.
+#     """
+#
+#     @functools.wraps(func)
+#     async def async_wrapper(self, *args, **kwargs):
+#         # The 'self' argument is the instance of RoleRotation
+#         if not self.config_good:
+#             print(f"Cannot run '{func.__name__}': Config is not loaded. Please run load_config().")
+#             return None
+#         return await func(self, *args, **kwargs)
+#
+#     @functools.wraps(func)
+#     def sync_wrapper(self, *args, **kwargs):
+#         # The 'self' argument is the instance of RoleRotation
+#         if not self.config_good:
+#             print(f"Cannot run '{func.__name__}': Config is not loaded. Please run load_config().")
+#             return None
+#         return func(self, *args, **kwargs)
+#
+#     # Return the correct wrapper based on whether the original function was async
+#     if asyncio.iscoroutinefunction(func):
+#         return async_wrapper
+#     else:
+#         return sync_wrapper
 
 
 # Manages the list of member_ids to rotate into duty, and the configuration for the app
@@ -171,7 +171,7 @@ class RoleRotation:
 
                 self.config_good = True
                 print("RoleRotation config loaded successfully.")
-                self.update_scheduler()
+                self.retrigger_scheduler()
             return None
 
         except json.JSONDecodeError as e:
@@ -197,7 +197,6 @@ class RoleRotation:
             self.config_good = False
             return e
 
-    @staticmethod
     def create_default_conf(force=False):
         """Creates a default config file"""
         if not force and CONFIG_FILE_NAME.is_file():
@@ -236,7 +235,6 @@ class RoleRotation:
             return json.load(confFP)
 
 
-    @config_required
     async def clear_role(self):
         """
         Removes the role from all MANAGED members. A member not listed in configuration is unaffected.
@@ -273,7 +271,6 @@ class RoleRotation:
 
 
 
-    @config_required
     async def add_user(self, member_id: int, position: int=-1):
         """
         Adds a user to the botton of the rotation.
@@ -309,7 +306,6 @@ class RoleRotation:
                 raise e
         return new_member
 
-    @config_required
     def remove_user(self, member_id):
 
         deleted = None
@@ -331,7 +327,6 @@ class RoleRotation:
 
         return deleted
 
-    @config_required
     async def rotate_role(self):
         """Rotates the duty role to the next member in the list."""
         print("Attempting to clear the roles")
@@ -351,7 +346,6 @@ class RoleRotation:
             e.add_note("Failed to write config to disk while rotating. The index is probably wrong right now.")
             raise e
 
-    # @config_required
     def set_index(self, i: int, force=False):
         if self.config_good:
             print("changing the index to " + i.__str__())
@@ -370,7 +364,6 @@ class RoleRotation:
 
         else: raise Exception("Tried to run this command without forcing it, but with unconfigured config")
 
-    @config_required
     async def fetch_members(self) -> List[discord.Member]:
         # todo use this in the loader function
         """Re-fetches all managed members from Discord."""
@@ -388,7 +381,6 @@ class RoleRotation:
         self.members = members
         return members
 
-    @config_required
     def move_member(self, member: discord.Member, position: int):
         if position < 0 or position > len(self.members)-1:
             raise Exception(f"Tried to move to an out-of-range index. Max is {len(self.members) - 1}")
@@ -424,9 +416,9 @@ class RoleRotation:
                 # f"On Duty: {self.members[self.index].name if self.members else 'None'}\n"
                 # f"Users: {[user.name for user in self.members]}")
 
-    @config_required
-    def update_scheduler(self):
-        """Called after reloading config from disk. Updates the scheduler to match is stored in the class"""
+    def retrigger_scheduler(self):
+        """Must be called after reloading config from disk. Updates the scheduler to match is stored in the class"""
+
         self.scheduler.remove_all_jobs()
         self.scheduler.add_job(
             self.rotate_role,
@@ -435,3 +427,12 @@ class RoleRotation:
             hour=self.schedule_hour,
             minute=self.schedule_minute,
         )
+
+    def set_new_schedule(self, day=-1, hour=-1, minute=-1):
+        self.schedule_day = self.schedule_day if day == -1 else day
+        self.schedule_hour = self.schedule_hour if hour == -1 else hour
+        self.schedule_minute = self.schedule_minute if minute == -1 else minute
+
+        self.write_config()
+        self.retrigger_scheduler()
+
